@@ -1,0 +1,216 @@
+---
+title: "Tidy Tuesday 2020/43: The Great American Beer Festival"
+author: "Giacomo Mutti"
+date: "21/10/2020"
+output:
+  html_document:
+    theme: paper
+    highlight: kate
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, fig.showtext = T, fig.retina = 1)
+```
+
+```{r dependencies, message=FALSE}
+library(tidyverse)
+library(grid)
+library(ggtext)
+
+extrafont::loadfonts(device = 'win') 
+```
+
+```{r theme}
+theme_set(theme_classic(base_family = "Staatliches"))
+theme_update(
+  plot.background = element_rect(fill = "#fdcb6e"),
+  axis.text = element_text(family = "Fira Sans", color = "#ecf0f1", angle = 30, size = 15),
+  axis.ticks = element_line(color = "#ecf0f1"),
+  axis.title = element_text(family = "Staatliches", color = "#0c2461", face = "plain", hjust = 1),
+  axis.line = element_blank(),
+  plot.title = element_textbox_simple(
+    family = "Staatliches", size = 34, halign = 0.5,
+    padding = margin(50, 0, 20, 0),
+    fill = "#ecf0f1",
+    color = "#0c2461",
+    margin = margin(0.4, -6.5, 0, -6.5)
+  ),
+  plot.subtitle = element_textbox_simple(
+    family = "Fira Sans", size = 10, color = "grey30", lineheight = 1.5,
+    padding = margin(5, 5, 50, 5),
+    fill = "#ecf0f1",
+    margin = margin(0, -6.5, 30, -6.5),
+    halign = .5
+  ),
+  plot.caption = element_text(
+    color = "#ecf0f1", size = 10, family = "Marvin Visions Small",
+    lineheight = 1,
+    hjust = 1, margin = margin(30, 0, 0, 0)
+  ),
+  panel.background = element_rect(fill = "#fdcb6e"),
+  plot.title.position = "plot",
+  plot.caption.position = "plot",
+  plot.margin = margin(3, 10, 20, 10)
+)
+```
+
+
+```{r data_import}
+beer_awards <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-10-20/beer_awards.csv')
+
+```
+
+```{r data_prep}
+beer <- beer_awards %>%
+  mutate(
+    state = toupper(state),
+    medal = factor(medal,
+      levels = c("Gold", "Silver", "Bronze"),
+      ordered = TRUE
+    )
+  )
+
+count_df <- beer %>%
+  group_by(state) %>%
+  count()
+
+# quality index = (10 * # gold + 4 * #silver + 1 * bronze ) / sum of weights
+
+final_df <- beer %>%
+  mutate(points = case_when(
+    medal == "Gold" ~ 10,
+    medal == "Silver" ~ 4,
+    medal == "Bronze" ~ 1
+  )) %>%
+  group_by(state, medal, points) %>%
+  tally() %>%
+  rename(n_rank = n) %>%
+  mutate(x = (n_rank * points)) %>%
+  ungroup(medal, points) %>%
+  left_join(count_df) %>%
+  mutate(qi = sum(x) / n) %>%
+  distinct(state, .keep_all = TRUE) %>%
+  select(-c(points, medal, n_rank, x)) %>%
+  ungroup() %>%
+  filter(n > 8)
+```
+
+```{r main}
+
+p <- final_df %>%
+  ggplot(aes(x = qi, y = n, label = state)) +
+  geom_hline(yintercept = mean(final_df$n), color = "#ced6e0", size = 2) +
+  geom_vline(xintercept = mean(final_df$qi), color = "#ced6e0", size = 2) +
+  geom_point(color = "#ecf0f1", size = 10, alpha = 0.5) +
+  geom_text(
+    color = "#636e72",
+    size = 5,
+    family = "Staatliches"
+  ) +
+  # tried to repel but didn't like it
+  # ggrepel::geom_text_repel(color = '#ecf0f1',
+  #                          point.padding = NA,
+  #                          segment.color = '#ecf0f1',
+  #                          segment.alpha = 0.8,
+  #                          size = 10,
+  #                          force = 0.05,
+  #                          segment.size = 1,
+  #                          family = 'Staatliches',arrow = arrow( type = "open", ends = "first")) +
+  scale_y_log10(breaks = c(10, 50, 100, 500, 1000)) +
+  scale_x_continuous() +
+  labs(
+    title = "Exploring excellence",
+    subtitle = "Which american states are the more consistent in crafting **top-quality beer**? We can visualize this thanks to the *Excellence Index (EI)*: a weighted average of the medals won by each state. Analyzing how this index changes with respect to the total number of medals won gives us insights about each state level of excellence. On the **top-right** side of the plot we can find states which are above average in both quantity and excellence whereas in the **bottom-left** corner there are below average states. Y-axis is logarithmic.",
+    caption = "Visualization by Giacomo Mutti - Data from the Great American Beer Festival.",
+    x = expression("EI" == frac("10*Golds+4*Silvers+1*Bronzes", "# of Medals")),
+    y = "# of Medals"
+  ) +
+  annotate(
+    geom = "text", x = min(final_df$qi), y = mean(final_df$n), label = expression("Excellence" %->% ""),
+    family = "Staatliches",
+    color = "#0c2461",
+    size = 5,
+    hjust = 0.3,
+    vjust = -0.5
+  ) +
+  annotate(
+    geom = "text", x = mean(final_df$qi), y = min(final_df$n), label = expression("Abundance" %->% ""),
+    family = "Staatliches",
+    color = "#0c2461",
+    size = 5,
+    hjust = 0.4,
+    vjust = -0.5,
+    angle = 90
+  ) +
+  annotate(
+    geom = "text", x = mean(final_df$qi), y = max(final_df$n), label = paste0("Mean = ", round(mean(final_df$qi), 2)),
+    family = "Staatliches",
+    color = "grey50",
+    size = 4,
+    alpha = 0.8,
+    hjust = 0.8,
+    vjust = -0.5,
+    angle = 90
+  ) +
+  annotate(
+    geom = "text", x = max(final_df$qi), y = mean(final_df$n), label = paste0("Mean = ", round(mean(final_df$n), 0)),
+    family = "Staatliches",
+    color = "grey50",
+    size = 4,
+    alpha = 0.8,
+    hjust = 0.8,
+    vjust = -0.5
+  ) +
+  theme(plot.background = element_rect(colour = "black", size = 3))
+
+
+labs <-
+  tibble(
+    qi = c(5.75, 5.65, 5.64),
+    n = c(870, 12, 380),
+    label = c(
+      "California is **by far** the <br> most prolific winner",
+      "Maine is the state with <br> highest level of excellence",
+      "Texas has the <br> *best of both worlds*"
+    ),
+    angle = c(0, 0, 0)
+  )
+
+arrows <-
+  tibble(
+    xend = c(5.08, 5.95, 5.59),
+    yend = c(962, 18, 274),
+    x = c(5.55, 5.65, 5.60),
+    y = c(970, 13.5, 347)
+  )
+
+p <- p + geom_richtext(
+  data = labs,
+  aes(
+    label = label,
+    angle = angle
+  ),
+  fill = NA,
+  color = "grey50",
+  size = 4,
+  family = "Fira Sans",
+  label.color = NA
+) +
+  geom_curve(
+    data = arrows,
+    aes(x, y, xend = xend, yend = yend),
+    color = "grey50",
+    curvature = 0.35,
+    size = 0.35,
+    inherit.aes = F
+  )
+```
+
+```{r save}
+ggsave(plot = p, filename = "../plots/2020_43/2020_43_Beer_scatter.pdf", device = cairo_pdf, width = 8, height = 14)
+
+pdftools::pdf_convert("../plots/2020_43/2020_43_Beer_scatter.pdf", filenames = "../plots/2020_43/2020_43_Beer_scatter.png",
+                     format = "png", dpi = 500)
+```
