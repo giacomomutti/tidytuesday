@@ -37,8 +37,11 @@ lemur_age <- lemurs %>%
 
 # Generate distribution of points for each species
 
-facet_plot(p2 + xlim_tree(0.8), panel="AGE", data=lemur_age, ggridges::geom_density_ridges, 
+def_plot <- facet_plot(p2 + xlim_tree(0.8), panel="AGE", data=lemur_age, ggridges::geom_density_ridges, 
            mapping = aes(x=age_at_death_y, group=label, fill=genus), colour="black", lwd=0.2,
            show.legend=FALSE) +
   scale_fill_manual(values = tableau_color_pal("Classic Cyclic")(13))
 
+ggsave("plots/2021_35.png", def_plot, dpi = 300, width = 15, height = 8)
+
+# take insp by https://github.com/Giovanerd/Tidy_tuesday/blob/main/week_35_2021/PhylogenyPlot.R
